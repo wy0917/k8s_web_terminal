@@ -1,0 +1,73 @@
+<html lang="en">
+    <head>
+        <meta charset="UTF-8">
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="stylesheet" href="node_modules/@xterm/xterm/css/xterm.css" />
+        <script src="node_modules/@xterm/xterm/lib/xterm.js"></script>
+        <script src="./term.js"></script>
+        <title>Document</title>
+    </head>
+    <body>
+        <dir style="margin:8; padding:0;">
+            <span>Namespace: <input type="text" name="namespace" value="default"></span>
+            <span>Pod: <input type="text" name="pod_name" value="hello-pod"></span>
+            <span>Container: <input type="text" name="container_name" value=""></span>
+            <span> <button onclick="connect()" id="connect">Connect</button></span>
+        </dir>
+    <div id="terminal" style="height:95vh;"></div>
+    <script>
+        var term = new Terminal({
+            theme: Solarized_Darcula,
+            fontSize: 13,
+            convertEol: true,
+            disableStdin: false
+        });
+        term.open(document.getElementById('terminal'));
+
+        const fitSize = () => {
+            var geometry = getTermSize(term)
+            term.resize(geometry.cols, geometry.rows)
+        }
+        window.onresize = fitSize
+        const connectButton = document.getElementById('connect')
+        const connect = () => {
+            let socket = new WebSocket(`ws://127.0.0.1:8080/ws/pod/terminal/log`);
+
+            const inputs = document.getElementsByTagName("input")
+            const namespace = inputs['namespace'].value
+            const pod_name = inputs['pod_name'].value
+            const container_name = inputs['container_name'].value
+            socket.onopen = function (e) {
+                socket.send(JSON.stringify({namespace, pod_name, container: container_name}));
+                fitSize()
+            };
+
+            socket.onmessage = function (event) {
+                if (event.data instanceof Blob) {
+                    let reader = new FileReader();
+                    reader.onload = e => {
+                        term.write(e.target.result)
+                    };
+                    reader.readAsText(event.data)
+                } else {
+                    console.log(event.data)
+                }
+            };
+
+            socket.onclose = function (event) {
+                console.log(event)
+                if (event.wasClean) {
+                    term.write(`[close] Connection closed`)
+                } else {
+                    term.write(`[close] Connection died`)
+                }
+            };
+
+            socket.onerror = function (error) {
+                term.write(`[error]`)
+            }
+            connectButton.disabled = true
+        }
+    </script>
+    </body>
+</html>
